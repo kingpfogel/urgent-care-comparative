@@ -16,7 +16,7 @@ from utilities import *
 
 ##### Labels #####
 def make_labels():
-    icu_details = pd.read_csv(path_views + '/icustay_detail.csv')
+    icu_details = pd.read_csv(path_views + '/icustay_detail.csv', quotechar='"', sep=',')
     #apply exclusion criterias
     icu_details = icu_details[(icu_details.age>=18)&(icu_details.los_hospital>=1)&(icu_details.los_icu>=1)]
     subj = list(set(icu_details.subject_id.tolist()))
@@ -80,9 +80,9 @@ def make_labels():
 ##### Diagnosis Pivot Table ######
 def pivot_icd(subj):
     '''subj: list of cohort subject_ids'''
-    df = pd.read_csv(path_tables + '/diagnoses_icd.csv')
+    df = pd.read_csv(path_tables + '/diagnoses_icd.csv', error_bad_lines=False, sep=",")
     #icd names
-    icd_names = pd.read_csv(path_tables + '/d_icd_diagnoses.csv')
+    icd_names = pd.read_csv(path_tables + '/d_icd_diagnoses.csv', error_bad_lines=False, sep=",", quotechar='"')
     #make dictionary of icd9 codes
     dct = {}
     for i in progressbar.progressbar(range(len(subj))):
@@ -110,23 +110,23 @@ def pivot_icd(subj):
 #### Features ####
 def get_features(patients):
     '''patients: {subject_id: hadm_id}'''
-    p_bg = pd.read_csv(path_views + '/pivoted_bg.csv')
+    #p_bg = pd.read_csv(path_views + '/pivoted_bg.csv')
     #p_gcs = pd.read_csv(path_views + '/pivoted_gcs.csv')
     #p_gcs = p_gcs[['icustay_id', 'charttime', 'gcs']]
     #p_uo = pd.read_csv(path_views+'/pivoted_uo.csv')
-    p_vital= pd.read_csv(path_views + '/pivoted_vital.csv')
-    p_lab = pd.read_csv(path_views + '/pivoted_lab.csv')
+    p_vital = pd.read_csv(path_views + '/pivoted_vital.csv')
+    #p_lab = pd.read_csv(path_views + '/pivoted_lab.csv')
     cohort = pd.read_csv(path_views + '/icustay_detail.csv')
     ## Exclusion criteria ##
     cohort = cohort[cohort.subject_id.isin(patients.keys())&(cohort.hadm_id.isin(patients.values()))]
 
     ## hourly binning ##
-    p_bg.charttime = pd.to_datetime(p_bg.charttime)
-    p_bg = p_bg.dropna(subset=['hadm_id'])
+    #p_bg.charttime = pd.to_datetime(p_bg.charttime)
+    #p_bg = p_bg.dropna(subset=['hadm_id'])
     p_vital.charttime = pd.to_datetime(p_vital.charttime)
     p_vital = p_vital.dropna(subset=['icustay_id'])
-    p_lab.charttime = pd.to_datetime(p_lab.charttime)
-    p_lab = p_lab.dropna(subset=['hadm_id'])
+    #p_lab.charttime = pd.to_datetime(p_lab.charttime)
+    #p_lab = p_lab.dropna(subset=['hadm_id'])
     #p_uo.charttime = pd.to_datetime(p_uo.charttime)
     #p_uo = p_uo.dropna(subset=['icustay_id'])
     #p_gcs.charttime = pd.to_datetime(p_gcs.charttime)
@@ -134,7 +134,7 @@ def get_features(patients):
     
     ## initialize icustays dict ##
     dct_bins = {}
-    lst= sorted(list(set(cohort.hadm_id)))
+    lst = sorted(list(set(cohort.hadm_id)))
     hadm_dct = dict([(h, cohort[cohort['hadm_id']==h].subject_id.values[0]) for h in lst])
     
     icu_hadm = dict([(h, cohort[cohort.hadm_id == h].icustay_id.tolist()) for h in lst])
@@ -148,11 +148,9 @@ def get_features(patients):
                   36.73772, 18.567563025210085, 96.941729323308266, 90.0,
                   4.5, 12.5, 0.89999999999999991, 140.5, 25.0, 275.0, 1.61,
                   4.25, 1.140, 7.4000000000000004, 39.0,1.5]
-    dfs = [p_vital, p_lab, p_bg]
+    dfs = [p_vital]
     lsts = [icustays, lst, lst]
-    cols = [['heartrate', 'sysbp', 'diasbp', 'tempc', 'resprate', 'spo2', 'glucose'],
-                   ['albumin', 'bun','creatinine', 'sodium', 'bicarbonate', 'platelet', 'inr'], 
-                   ['potassium', 'calcium', 'ph', 'pco2', 'lactate']]
+    cols = ['heartrate', 'sysbp', 'diasbp', 'tempc', 'resprate', 'spo2', 'glucose']
     
     ## initialize features by filtered hadm ##
     features = {}
@@ -183,21 +181,22 @@ def get_features(patients):
                 lst.append(icu_dct[h])
 
     #get timestamps for labs
-    lst2 = []
-    for j in progressbar.progressbar(range(len(lst))):
-        h = lst[j]
-        timesteps = [i for i in p_lab[p_lab['hadm_id']==h].set_index('charttime').resample('H').first().index.tolist() if i <= max(features[h].keys())]
-        if len(timesteps)>=1:
-            lst2.append(h)
-    lst = lst2; del lst2
+    #lst2 = []
+    #for j in progressbar.progressbar(range(len(lst))):
+    #    h = lst[j]
+    #    timesteps = [i for i in p_lab[p_lab['hadm_id']==h].set_index('charttime').resample('H').first().index.tolist() if i <= max(features[h].keys())]
+    #    if len(timesteps)>=1:
+    #        lst2.append(h)
+    #lst = lst2; del lst2
+
     #update icustays list and features
-    features = dict([(k,v) for k,v in features.items() if k in lst])
-    icu_hadm = dict([(h, cohort[cohort.hadm_id == h].icustay_id.tolist()) for h in lst])
-    icu_dct = {}
-    for key,val in icu_hadm.items():
-        for v in val:
-            icu_dct[v] = key
-    icustays = sorted(icu_dct.keys())
+    #features = dict([(k,v) for k,v in features.items() if k in lst])
+    #icu_hadm = dict([(h, cohort[cohort.hadm_id == h].icustay_id.tolist()) for h in lst])
+    #icu_dct = {}
+    #for key,val in icu_hadm.items():
+    #    for v in val:
+    #        icu_dct[v] = key
+    #icustays = sorted(icu_dct.keys())
 
     print()
     print("="*80)
@@ -207,7 +206,7 @@ def get_features(patients):
     lsts = [icustays, lst, lst]
     feature_index=0
     for idx in range(len(dfs)):
-        for c in cols[idx]:
+        for c in cols:
             #dfs[idx][c] = (dfs[idx][c]-dfs[idx][c].min() )/ (dfs[idx][c].quantile(.95) - dfs[idx][c].min())
             top5 = dfs[idx][c].quantile(.95) 
             bot5 = dfs[idx][c].quantile(.05) 
@@ -262,10 +261,10 @@ def get_demographics(patients):
     from sklearn.preprocessing import LabelEncoder
     subj = list(set(patients.keys()))
     hadm = list(set(patients.values()))
-    cohort = pd.read_csv(path_views + '/icustay_detail.csv')
+    cohort = pd.read_csv(path_views + '/icustay_detail.csv', quotechar='"', sep=',')
     ## Exclusion criteria ##
     cohort = cohort[cohort.subject_id.isin(patients.keys())&(cohort.hadm_id.isin(patients.values()))]
-    admissions = pd.read_csv(path_tables + '/admissions.csv')
+    admissions = pd.read_csv(path_tables + '/admissions.csv', quotechar='"', sep=',')
     cohort = cohort[['subject_id', 'hadm_id', 'age', 'ethnicity']]
     admissions = admissions[['subject_id', 'hadm_id', 'discharge_location', 'marital_status', 'insurance' ]]
     df = pd.merge(cohort, admissions, on = ['subject_id', 'hadm_id'])
@@ -372,23 +371,30 @@ def create_parser():
 
 
 if __name__ == '__main__':
-    parser = create_parser()
-    opts = parser.parse_args()
+    #parser = create_parser()
+    #opts = parser.parse_args()
     
-    path_tables = opts.path_tables
-    path_views = opts.path_views
-    path_save = opts.path_save
+    path_tables = "./local_mimic/tables/" #opts.path_tables
+    path_views = "./local_mimic/views/" #opts.path_views
+    path_save = "./local_mimic/save/" #opts.path_save
 
     if (path_tables and path_views and path_save):
         create_dir_if_not_exists(path_save)
     
-        labels, dx_freq, dx_dct = make_labels()
-        with open(path_save + '/labels', 'wb') as f:
-            pickle.dump(labels, f)
-        with open(path_save + 'diagnostic_freq', 'wb') as f:
-            pickle.dump(dx_freq, f)
-        with open(path_save + 'diagnostic_dict', 'wb') as f:
-            pickle.dump(dx_dct, f)
+        #labels, dx_freq, dx_dct = make_labels()
+        #with open(path_save + '/labels', 'wb') as f:
+        #    pickle.dump(labels, f)
+        #with open(path_save + 'diagnostic_freq', 'wb') as f:
+        #    pickle.dump(dx_freq, f)
+        #with open(path_save + 'diagnostic_dict', 'wb') as f:
+        #    pickle.dump(dx_dct, f)
+        with open(path_save + 'labels', 'rb') as f:
+            labels = pickle.load(f)
+        with open(path_save + 'diagnostic_freq', 'rb') as f:
+            dx_freq = pickle.load(f)
+        with open(path_save + 'diagnostic_dict', 'rb') as f:
+            dx_dct = pickle.load(f)
+
         print("Saving labels ..." )
         print("........")
         print("Saving diagnostic dictionaries ... ")

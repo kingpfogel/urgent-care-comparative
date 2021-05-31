@@ -11,6 +11,7 @@ import utilities
 import argparse
 import pickle
 from deep_models import *
+from pathlib import Path
 
 from sklearn.model_selection import *
 from sklearn.linear_model import LogisticRegression as LR
@@ -30,12 +31,12 @@ def pipeline(X, Z, opts):
     
     y = get_task(opts)
     targets, multiclass, deep = get_setup(opts)
-    if targets>1:
-        ref_target = y[:,-1]
-        for idx in range(len(y[0,:])):
-            y[:, idx][y[:,idx]>1] = 1
-    else:
-        ref_target = y
+    #if targets>1:
+    #    ref_target = y[:,-1]
+    #    for idx in range(len(y[0,:])):
+    #        y[:, idx][y[:,idx]>1] = 1
+    #else:
+    ref_target = y
     
     X,y= np.array(X), np.array(y)
     if Z is not None: Z = np.array(Z)
@@ -71,9 +72,9 @@ def pipeline(X, Z, opts):
                     xs, ys = shuffle(X_tr, y_tr)
             else:
                 if (Z is not None) and deep:
-                    xs, zs, ys = hierarchical_subsample(X_tr, Z_tr, y_tr, 1.0)
+                    xs, zs, ys = utilities.hierarchical_subsample(X_tr, Z_tr, y_tr, 1.0)
                 else:
-                    xs, ys = balanced_subsample(X_tr, y_tr, 1.0)
+                    xs, ys = utilities.balanced_subsample(X_tr, y_tr, 1.0)
                 ys = np.array([[i] for i in ys])
 
             if deep:
@@ -87,9 +88,10 @@ def pipeline(X, Z, opts):
             else:
                 model = model.fit(xs, ys)
                 
-        if deep: model.load_weights(filename)
-        else: 
-            with open(filename, 'wb') as f: pickle.dump(model, f)
+        if deep:
+            model.load_weights(filename)
+        else:
+            with open(filename) as f: pickle.dump(model, f)
         if (Z is not None) and deep and (opts.model !='mlp'):
             tr_auc, _, _, _ = test_model(x = [X_tr, Z_tr], y= y_tr, model = model, n_classes=targets)
             te_auc, f1_score, sen, spec = test_model(x = [X_te, Z_te], y= y_te, 
@@ -102,6 +104,7 @@ def pipeline(X, Z, opts):
     
     return model, data
 
+
 ### Scoring ###
 def test_model(x,y, model, n_classes):
     yhat = model.predict(x)
@@ -110,6 +113,7 @@ def test_model(x,y, model, n_classes):
     else:
         roc_auc, f1, sen, spec= single_score(y, yhat)
     return roc_auc, f1, sen, spec
+
 
 def single_score(y_te, yhat):
     fpr, tpr, thresholds = roc_curve(y_te, yhat)
@@ -125,6 +129,7 @@ def single_score(y_te, yhat):
     f1=f1_score(y_te,yhat)
     return roc_auc, f1, sen, spec
 
+
 def micro_score(y_te, yhat):
     yhat, y_te = np.array(yhat), np.array(y_te)
     yhat, y_te = yhat.ravel(), y_te.ravel()
@@ -136,6 +141,7 @@ def micro_score(y_te, yhat):
     yhat=[int(i) for i in yhat]
     f1=f1_score(y_te,yhat)
     return roc_auc, f1
+
 
 def multi_score(y_te, ypred):
     ypred, y_te = np.array(ypred), np.array(y_te)
@@ -155,6 +161,7 @@ def multi_score(y_te, ypred):
     aucs['micro'], f1s['micro'] = micro_score(y_te, ypred)
     return aucs, f1s, sens, specs
 
+
 ### Main ###
 def main(opts):
     features = np.load(opts.features_dir)
@@ -168,11 +175,19 @@ def main(opts):
 
 
 def get_task(opts):
-    with open(opts.y_dir, 'rb') as f:
+    #with open(opts.y_dir, 'rb') as f:
+    #    labels = pickle.load(f)
+    #dct = {'mort':0, 'readmit': 1, 'los': 2, 'dx':3, 'sepsis_v1': 4}
+    #task = [yy[dct[opts.task]] for yy in labels]
+
+    with open(".\\local_mimic\\save\\labels", "rb") as f:
         labels = pickle.load(f)
-    dct = {'mort':0, 'readmit': 1, 'los': 2, 'dx':3 }
-    task = [yy[dct[opts.task]] for yy in labels]
-    return np.array(task)
+    res = []
+    for key, value in labels.items():
+        bla = value["sepsis_v1"]
+        res.append(bla)
+    return np.array(res)
+
 
 def get_setup(opts):
     multiclass= False
@@ -183,6 +198,7 @@ def get_setup(opts):
     if opts.model in ['lstm', 'cnn', 'mlp']: deep = True
     else: deep=False
     return targets, multiclass, deep
+
 
 def take_names(opts):
     #x_name
@@ -209,6 +225,7 @@ def take_names(opts):
     else:
         aux_name = 'None'    
     return x_name, aux_name
+
 
 def make_model(opts, input_shape, aux_shape):
     targets, multiclass, deep = get_setup(opts)
@@ -248,22 +265,23 @@ def make_model(opts, input_shape, aux_shape):
         model = None
     return model
 
+
 def create_parser():
     """Creates a parser for command-line arguments.
     """
     parser = argparse.ArgumentParser()
 
     # Training hyper-parameters
-    parser.add_argument('--features_dir', type=str, default='/local_mimic/save/X19.npy',
+    parser.add_argument('--features_dir', type=str, default='local_mimic\\save\\X19.npy',
                         help='Path to the uniform feature matrix (X19 or X48), or diagnostic history (sentences or onehot) file.')
-    parser.add_argument('--auxiliary_dir', type=str, default='/local_mimic/save/w2v.npy',
+    parser.add_argument('--auxiliary_dir', type=str, default='local_mimic\\save\\w2v.npy',
                         help='Path to the auxiliary features (w2v, h2v or demo) file.')
-    parser.add_argument('--y_dir', type=str, default='/local_mimic/save/y',
+    parser.add_argument('--y_dir', type=str, default='local_mimic\\save\\y',
                         help='Path to the task labels (Y) file.')
     parser.add_argument('--model', default= 'lstm',
                         choices=['lstm' , 'cnn', 'mlp', 'svm', 'rf', 'lr', 'gbc'],
                         help='Type of model to use: lstm (default), cnn, mlp, svm, rf, lr, gbc.')
-    parser.add_argument('--task', choices = ['readmit', 'mort', 'los','dx' ], default='mort',
+    parser.add_argument('--task', choices = ['readmit', 'mort', 'los','dx', 'sepsis_v1'], default='mort',
                         help='Target task: readmission (readmit), mortality (mort), los, diagnosis (dx).')
 
     parser.add_argument('--hidden_size', type=int, default=256,
@@ -275,7 +293,7 @@ def create_parser():
     parser.add_argument('--learning_rate', type=float, default=0.005,
                         help='The learning rate (default 0.005)')
 
-    parser.add_argument('--checkpoint_dir', type=str, default='/local_mimic/save/checkpoint',
+    parser.add_argument('--checkpoint_dir', type=str, default='local_mimic\\save\\checkpoint',
                         help='Set the directry to store the best model checkpoints.')
 
     return parser
@@ -311,7 +329,5 @@ if __name__ == '__main__':
 
     scores_folder = os.path.join(opts.checkpoint_path, 'scores')
     model, stats = main(opts)
-    with open(scores_folder + '/raw_stats', 'wb') as f:
+    with open(scores_folder + '\\raw_stats', 'wb') as f:
         pickle.dump(stats, f)
-    
-        
